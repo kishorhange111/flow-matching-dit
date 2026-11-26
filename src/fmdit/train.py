@@ -37,18 +37,18 @@ def cifar10(root, device, train=True):
         z = np.load(cache)
         data, targets = z["x"], z["y"]
     else:
-        try:
-            from torchvision.datasets import CIFAR10
-
-            ds = CIFAR10(root, train=train, download=True)
-            data, targets = ds.data, np.asarray(ds.targets)
-        except Exception as e:  # the Toronto server is often slow or returns a bad file
-            print(f"torchvision download failed ({e}); using the Hugging Face copy", flush=True)
+        try:  # the Hugging Face copy is fast; the Toronto server can take 20+ min or fail
             from datasets import load_dataset
 
             hf = load_dataset("uoft-cs/cifar10", split="train" if train else "test")
             data = np.stack([np.asarray(im.convert("RGB")) for im in hf["img"]])
             targets = np.asarray(hf["label"])
+        except Exception as e:
+            print(f"Hugging Face load failed ({e}); using torchvision", flush=True)
+            from torchvision.datasets import CIFAR10
+
+            ds = CIFAR10(root, train=train, download=True)
+            data, targets = ds.data, np.asarray(ds.targets)
         os.makedirs(root, exist_ok=True)
         np.savez(cache, x=data, y=targets)
     x = torch.from_numpy(data).permute(0, 3, 1, 2).contiguous()
