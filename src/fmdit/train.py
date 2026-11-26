@@ -30,11 +30,29 @@ CONFIGS = {
 def cifar10(root, device, train=True):
     """The whole split as a uint8 tensor on ``device`` plus labels: 150 MB, so augmentation
     and batching stay on the GPU."""
-    from torchvision.datasets import CIFAR10
+    import numpy as np
 
-    ds = CIFAR10(root, train=train, download=True)
-    x = torch.from_numpy(ds.data).permute(0, 3, 1, 2).contiguous()
-    return x.to(device), torch.tensor(ds.targets, device=device)
+    cache = os.path.join(root, f"cifar10_{'train' if train else 'test'}.npz")
+    if os.path.exists(cache):
+        z = np.load(cache)
+        data, targets = z["x"], z["y"]
+    else:
+        try:
+            from torchvision.datasets import CIFAR10
+
+            ds = CIFAR10(root, train=train, download=True)
+            data, targets = ds.data, np.asarray(ds.targets)
+        except Exception as e:  # the Toronto server is often slow or returns a bad file
+            print(f"torchvision download failed ({e}); using the Hugging Face copy", flush=True)
+            from datasets import load_dataset
+
+            hf = load_dataset("uoft-cs/cifar10", split="train" if train else "test")
+            data = np.stack([np.asarray(im.convert("RGB")) for im in hf["img"]])
+            targets = np.asarray(hf["label"])
+        os.makedirs(root, exist_ok=True)
+        np.savez(cache, x=data, y=targets)
+    x = torch.from_numpy(data).permute(0, 3, 1, 2).contiguous()
+    return x.to(device), torch.tensor(targets, device=device)
 
 
 def to_model_range(x_u8, flip=None):
