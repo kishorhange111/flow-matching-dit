@@ -61,7 +61,11 @@ def guided(model, n_classes, w: float):
 @torch.no_grad()
 def sample(v, z, y, steps: int, method: str = "euler"):
     """Integrate dx/dt = v(x, t, y) from t = 0 (noise z) to t = 1. Returns x(1) and the
-    number of velocity evaluations used."""
+    number of velocity evaluations used.
+
+    ``heun``'s last corrector evaluates the network at exactly t = 1, which logit-normal
+    training almost never samples. ``edm_heun`` takes a plain Euler step there instead, as
+    in Karras et al.'s EDM sampler, so every evaluation is at t < 1."""
     x, b = z, z.shape[0]
     ts = torch.linspace(0, 1, steps + 1, device=z.device)
     nfe = 0
@@ -70,9 +74,10 @@ def sample(v, z, y, steps: int, method: str = "euler"):
         h = t1 - t0
         k1 = v(x, t0.expand(b), y)
         nfe += 1
-        if method == "euler":
+        last = i == steps - 1
+        if method == "euler" or (method == "edm_heun" and last):
             x = x + h * k1
-        elif method == "heun":
+        elif method in ("heun", "edm_heun"):
             xe = x + h * k1
             k2 = v(xe, t1.expand(b), y)
             nfe += 1

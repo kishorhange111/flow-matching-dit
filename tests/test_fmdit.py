@@ -116,6 +116,24 @@ def test_heun_is_second_order_and_euler_first_order():
     assert err(8, "heun") < err(16, "euler")  # Heun wins at equal NFE
 
 
+def test_edm_heun_never_evaluates_at_t_one():
+    seen = []
+
+    def v(x, t, y):
+        seen.append(float(t[0]))
+        return exact_velocity(x, t, y)
+
+    z = torch.randn(1000, 1, generator=torch.Generator().manual_seed(0), dtype=torch.float64)
+    x, nfe = sample(v, z, None, 16, "edm_heun")
+    assert nfe == 31 and len(seen) == 31 and max(seen) < 1.0
+    seen.clear()
+    sample(v, z, None, 16, "heun")
+    assert max(seen) == 1.0
+    ref, _ = sample(exact_velocity, z, None, 4096, "heun")
+    err = lambda m, n: (sample(exact_velocity, z, None, n, m)[0] - ref).abs().max().item()
+    assert err("edm_heun", 16) < err("euler", 32)  # still beats Euler at equal NFE
+
+
 def test_guidance_mixes_conditional_and_unconditional():
     m = tiny()
     for p in m.parameters():

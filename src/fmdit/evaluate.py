@@ -28,6 +28,9 @@ from .train import CONFIGS, cifar10
 GRID = [("euler", s, 1.5) for s in (8, 16, 32, 64)]
 GRID += [("heun", s, 1.5) for s in (4, 8, 16, 32)]
 GRID += [("euler", 32, w) for w in (1.0, 2.0, 3.0, 4.0)]
+# Heun with and without the t = 1 evaluation, against Euler, at matched evaluation counts
+SAMPLER_GRID = [(m, s, 2.0) for m in ("euler", "heun", "edm_heun") for s in (8, 16, 32)]
+SAMPLER_GRID += [("euler", 64, 2.0)]
 
 
 @torch.no_grad()
@@ -52,7 +55,7 @@ def main(argv=None):
     ap.add_argument("--size", choices=list(CONFIGS), default="S")
     ap.add_argument("--data", default="data")
     ap.add_argument("--n", type=int, default=5000)
-    ap.add_argument("--grid", default="full", choices=["full", "best"])
+    ap.add_argument("--grid", default="full", choices=["full", "best", "sampler"])
     ap.add_argument("--ref", default="results/ref_cifar10_train.npz")
     ap.add_argument("--device", default="cuda")
     a = ap.parse_args(argv)
@@ -73,7 +76,7 @@ def main(argv=None):
     done = set()
     if os.path.exists(path):
         done = {(r["method"], r["steps"], r["cfg"], r["n"]) for r in map(json.loads, open(path))}
-    grid = GRID if a.grid == "full" else [("heun", 16, 1.5)]
+    grid = {"full": GRID, "best": [("heun", 16, 1.5)], "sampler": SAMPLER_GRID}[a.grid]
     for method, steps, w in grid:
         if (method, steps, w, a.n) in done:
             continue
